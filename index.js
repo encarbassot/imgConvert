@@ -2,7 +2,8 @@ const INPUT_FOLDER = "./input";  // Folder with original images
 const OUTPUT_FOLDER = "./output"; // Folder where converted images will be saved
 const OUTPUT_FORMAT = "webp"; // Default format (changeable)
 const QUALITY = 80; // Image quality (0-100)
-
+const COPY_NON_IMAGE_FILES = true; // If true, non-image files are copied to output
+const CLEAR_OUTPUT_FOLDER = true
 
 import fs from "fs-extra";
 import path from "path";
@@ -15,58 +16,81 @@ async function convertImages() {
 
   try {
     // Ensure the output folder exists
-    await fs.ensureDir(OUTPUT_FOLDER);
+    if(CLEAR_OUTPUT_FOLDER){
+      await fs.emptyDir(OUTPUT_FOLDER);
+    }else{
+      await fs.ensureDir(OUTPUT_FOLDER);
+    }
 
-    const files = await fs.readdir(INPUT_FOLDER);
-    const imageFiles = files.filter(file => /\.(jpg|jpeg|png|gif)$/i.test(file));
+    // Get all images (and non-image files if COPY_NON_IMAGE_FILES is true)
+    const allFiles = await getAllFiles(INPUT_FOLDER);
 
-    if (imageFiles.length === 0) {
+    if (allFiles.length === 0) {
       console.log(chalk.yellow("No images found in input folder."));
       return;
     }
 
     let totalOriginalSize = 0;
     let totalNewSize = 0;
+    let imagesConverted = 0;
+    let filesCopied = 0;
 
-    console.log(chalk.blue(`Processing ${imageFiles.length} images...\n`));
+    console.log(chalk.blue(`Processing ${allFiles.length} files...\n`));
 
-    for (const file of imageFiles) {
-      const imageStartTime = performance.now(); // Start image timer
-
-      const inputPath = path.join(INPUT_FOLDER, file);
-      const outputFileName = `${path.parse(file).name}.${OUTPUT_FORMAT}`;
-      const outputPath = path.join(OUTPUT_FOLDER, outputFileName);
+    for (const filePath of allFiles) {
+      const relativePath = path.relative(INPUT_FOLDER, filePath);
+      const outputFilePath = path.join(OUTPUT_FOLDER, relativePath);
 
       try {
-        const { size: originalSize } = await fs.stat(inputPath);
-        totalOriginalSize += originalSize;
+        const stats = await fs.stat(filePath);
+        totalOriginalSize += stats.size;
 
-        await sharp(inputPath)
-          .toFormat(OUTPUT_FORMAT, { quality: QUALITY })
-          .toFile(outputPath);
+        if (isImageFile(filePath)) {
+          const outputImagePath = outputFilePath.replace(path.extname(filePath), `.${OUTPUT_FORMAT}`);
 
-        const { size: newSize } = await fs.stat(outputPath);
-        totalNewSize += newSize;
+          // Ensure the subdirectory exists
+          await fs.ensureDir(path.dirname(outputImagePath));
 
-        const imageEndTime = performance.now(); // End image timer
-        const imageElapsedTime = ((imageEndTime - imageStartTime) / 1000).toFixed(2); // Convert to seconds
+          const imageStartTime = performance.now(); // Start image timer
 
-        console.log(
-          chalk.green(`✔ ${file} -> ${outputFileName}`),
-          chalk.gray(`(${formatSize(originalSize)} → ${formatSize(newSize)})`),
-          chalk.magenta(`🕒 ${imageElapsedTime}s`)
-        );
+          await sharp(filePath)
+            .toFormat(OUTPUT_FORMAT, { quality: QUALITY })
+            .toFile(outputImagePath);
+
+          const { size: newSize } = await fs.stat(outputImagePath);
+          totalNewSize += newSize;
+          imagesConverted++;
+
+          const imageEndTime = performance.now();
+          const imageElapsedTime = ((imageEndTime - imageStartTime) / 1000).toFixed(2);
+
+          console.log(
+            chalk.green(`✔ ${relativePath} -> ${path.basename(outputImagePath)}`),
+            chalk.gray(`(${formatSize(stats.size)} → ${formatSize(newSize)})`),
+            chalk.magenta(`🕒 ${imageElapsedTime}s`)
+          );
+
+        } else if (COPY_NON_IMAGE_FILES) {
+          // Copy non-image files if enabled
+          await fs.ensureDir(path.dirname(outputFilePath));
+          await fs.copy(filePath, outputFilePath);
+          filesCopied++;
+
+          console.log(chalk.yellow(`📄 Copied non-image file: ${relativePath}`));
+        }
+
       } catch (err) {
-        console.error(chalk.red(`Error processing ${file}:`), err.message);
+        console.error(chalk.red(`Error processing ${relativePath}:`), err.message);
       }
     }
 
     const savedSpace = totalOriginalSize - totalNewSize;
-    const endTime = performance.now(); // End timer
-    const elapsedTime = ((endTime - startTime) / 1000).toFixed(2); // Convert to seconds
+    const endTime = performance.now();
+    const elapsedTime = ((endTime - startTime) / 1000).toFixed(2);
 
     console.log("\n" + chalk.cyan("===== Summary ====="));
-    console.log(chalk.cyan(`📸 Images converted: ${imageFiles.length}`));
+    console.log(chalk.cyan(`📸 Images converted: ${imagesConverted}`));
+    console.log(chalk.cyan(`📂 Non-image files copied: ${filesCopied}`));
     console.log(chalk.cyan(`📂 Space saved: ${formatSize(savedSpace)}`));
     console.log(chalk.cyan(`⏳ Time elapsed: ${elapsedTime} seconds`));
 
@@ -75,7 +99,29 @@ async function convertImages() {
   }
 }
 
-// Helper function to format file sizes
+// Recursively gets all files in a directory
+async function getAllFiles(directory) {
+  let files = [];
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files = files.concat(await getAllFiles(fullPath));
+    } else {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+// Check if the file is an image
+function isImageFile(file) {
+  return /\.(jpg|jpeg|png|gif)$/i.test(file);
+}
+
+// Format file sizes
 function formatSize(bytes) {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   if (bytes === 0) return "0 Byte";

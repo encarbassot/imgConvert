@@ -1,0 +1,22 @@
+# 📷 Image Converter Tool
+This tool helps you **convert images** from different formats (JPEG, PNG, GIF) into a **lighter format (WEBP by default)** to **save storage space and improve performance**. It also **preserves the original folder structure** and allows copying non-image files if needed.
+
+## 🔧 How to Use
+### 1️⃣ Place Your Images in the Input Folder
+- Open the input folder inside this project.
+- Put all your images inside.
+- If you have subfolders, they will be kept the same in the output.
+### 2️⃣ Run the Converter
+- Open the Terminal.
+- Navigate to the folder where the script is located using:
+```bash
+cd /path/to/the/folder
+```
+- Run the script:
+```bash
+node index.js
+```
+### 3️⃣ Get Your Converted Images
+- Once finished, you will find the new images inside the output folder.
+- The images will keep their original folders.
+- The original images will not be deleted or modified.

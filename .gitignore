@@ -19,9 +19,6 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
-# Image processing output folder (if you want to ignore it)
-output/
-
 # IDE / Editor files
 .vscode/
 .idea/
